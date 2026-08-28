@@ -1,0 +1,25 @@
+[package]
+name = "fedimintd-floresta"
+description = "fedimintd with florestad as the Bitcoin backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "fedimintd-floresta"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+fedimint-core = { workspace = true }
+fedimint-floresta = { path = "../fedimint-floresta" }
+fedimint-logging = { workspace = true }
+fedimint-rocksdb = { workspace = true }
+fedimint-server = { workspace = true }
+fedimint-server-core = { workspace = true }
+fedimint-server-ui = { workspace = true }
+fedimintd = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

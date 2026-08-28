@@ -1,6 +1,35 @@
-[package]
-name = "fedimint_floresta"
+[workspace]
+resolver = "2"
+members = ["crates/fedimint-floresta", "crates/fedimintd-floresta"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
-[dependencies]
+[workspace.dependencies]
+# Fedimint, pinned to the commit the feasibility study and spike were traced against.
+fedimint-core = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+fedimint-logging = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+fedimint-server-core = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+fedimint-server = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+fedimint-server-ui = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+fedimint-rocksdb = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+fedimintd = { git = "https://github.com/fedimint/fedimint", rev = "483a830aa183d543ace423137347118c7cb38152" }
+
+# Versions and features mirror fedimint's workspace to keep a single copy of each in the tree.
+anyhow = "1.0"
+async-trait = "0.1"
+bitcoin = { version = "0.32", features = ["serde"] }
+clap = { version = "4", features = ["derive", "env"] }
+futures = "0.3"
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "charset", "http2"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+
+[profile.dev]
+# fedimint's tree is large; keep incremental rebuilds of our own crates cheap.
+opt-level = 0

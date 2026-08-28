@@ -1,0 +1,19 @@
+[package]
+name = "fedimint-floresta"
+description = "Fedimint server Bitcoin backend (IServerBitcoinRpc) backed by a florestad JSON-RPC endpoint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+bitcoin = { workspace = true }
+fedimint-core = { workspace = true }
+fedimint-logging = { workspace = true }
+fedimint-server-core = { workspace = true }
+hex = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
