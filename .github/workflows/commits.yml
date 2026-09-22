@@ -1,0 +1,33 @@
+name: Commits
+
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conventional:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: check commit messages
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          pattern='^(feat|fix|doc|refactor|test|ci|chore)(\([a-z0-9_-]+\))?!?: .+'
+          bad=0
+          while IFS= read -r subject; do
+            if ! printf '%s' "$subject" | grep -qE "$pattern"; then
+              echo "::error::commit subject is not conventional: $subject"
+              bad=1
+            fi
+          done < <(git log --no-merges --format=%s "origin/$BASE_REF..HEAD")
+          exit "$bad"
