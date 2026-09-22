@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # GitHub Actions pins only. Cargo dependencies are pinned deliberately
+  # (fedimint at a fixed rev) and are bumped in dedicated PRs, not here.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

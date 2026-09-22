@@ -24,7 +24,11 @@ pub const FLORESTA_RPC_KIND: &str = "floresta";
 pub struct FlorestaClient {
     url: SafeUrl,
     /// Optional HTTP Basic auth. Ignored by florestad builds without RPC auth support.
+    // Both fields are read once the trait method bodies land; the allows keep the
+    // scaffold clippy-clean until then.
+    #[allow(dead_code)]
     auth: Option<(String, String)>,
+    #[allow(dead_code)]
     http: reqwest::Client,
 }
 
