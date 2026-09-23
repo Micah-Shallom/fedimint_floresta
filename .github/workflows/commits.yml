@@ -22,7 +22,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          pattern='^(feat|fix|doc|refactor|test|ci|chore)(\([a-z0-9_-]+\))?!?: .+'
+          pattern='^(feat|fix|doc|refactor|test|ci|chore|build)(\([a-z0-9_-]+\))?!?: .+'
           bad=0
           while IFS= read -r subject; do
             if ! printf '%s' "$subject" | grep -qE "$pattern"; then
