@@ -5,7 +5,7 @@ members = ["crates/fedimint-floresta", "crates/fedimintd-floresta"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 # Fedimint, pinned to the commit the feasibility study and spike were traced against.
