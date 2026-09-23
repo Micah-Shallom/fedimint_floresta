@@ -3,11 +3,8 @@ name = "fedimintd-floresta"
 description = "fedimintd with florestad as the Bitcoin backend"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-
-[[bin]]
-name = "fedimintd-floresta"
-path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }

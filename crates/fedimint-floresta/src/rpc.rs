@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Minimal JSON-RPC 2.0 transport for florestad.
 //!
 //! Floresta's RPC surface is a Bitcoin Core compatible subset, so the adapter

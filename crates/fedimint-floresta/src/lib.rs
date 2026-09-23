@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Fedimint server Bitcoin backend backed by a `florestad` JSON-RPC endpoint.
 //!
 //! [`FlorestaClient`] implements [`IServerBitcoinRpc`], the trait a Fedimint guardian

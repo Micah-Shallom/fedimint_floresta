@@ -3,6 +3,7 @@ name = "fedimint-floresta"
 description = "Fedimint server Bitcoin backend (IServerBitcoinRpc) backed by a florestad JSON-RPC endpoint"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
