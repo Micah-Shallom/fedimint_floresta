@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! `fedimintd-floresta`: stock fedimintd with `florestad` as the Bitcoin backend.
 //!
 //! Scaffold checkpoint: this only proves the full fedimint dependency tree resolves

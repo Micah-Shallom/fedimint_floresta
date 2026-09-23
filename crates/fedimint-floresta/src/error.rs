@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use std::fmt;
 
 /// `getblockhash`/`getblock` for a block the node does not know (e.g. height above tip).
