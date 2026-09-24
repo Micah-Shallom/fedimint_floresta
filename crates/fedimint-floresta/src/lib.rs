@@ -10,6 +10,8 @@
 //! Pinned against fedimint `483a830`. Block fetch (`get_block`) and transaction
 //! broadcast (`submit_transaction`) are not implemented yet.
 
+use std::sync::atomic::AtomicU64;
+
 pub mod error;
 mod rpc;
 
@@ -34,6 +36,8 @@ pub struct FlorestaClient {
     /// Optional HTTP Basic auth. Ignored by florestad builds without RPC auth support.
     auth: Option<(String, String)>,
     http: reqwest::Client,
+    /// Monotonic JSON-RPC request id, echoed back by the server per request.
+    next_id: AtomicU64,
 }
 
 impl FlorestaClient {
@@ -42,7 +46,10 @@ impl FlorestaClient {
         Ok(Self {
             url: url.clone(),
             auth,
-            http: reqwest::Client::builder().build()?,
+            http: reqwest::Client::builder()
+                .timeout(rpc::REQUEST_TIMEOUT)
+                .build()?,
+            next_id: AtomicU64::new(0),
         })
     }
 }
