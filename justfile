@@ -18,5 +18,9 @@ test:
     cargo build --locked --workspace
     cargo test --locked --workspace
 
+# Fail on declared-but-unused dependencies (one-time: cargo install cargo-machete)
+machete:
+    cargo machete
+
 # Everything CI checks, in CI order
-pre-push: check test
+pre-push: check test machete

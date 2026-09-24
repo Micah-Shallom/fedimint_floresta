@@ -34,6 +34,19 @@ jobs:
       - name: clippy
         run: cargo clippy --locked --all-targets --workspace -- -D warnings
 
+  machete:
+    name: Unused dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@b4b80945859e8ef89a9732a0f46499a443b196fe # v2.62.59
+        with:
+          tool: cargo-machete
+      - name: cargo machete
+        run: cargo machete
+
   test:
     name: Test
     runs-on: ubuntu-latest
