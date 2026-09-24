@@ -33,8 +33,8 @@ impl FlorestaClient {
         });
 
         let mut http_request = self.http.post(self.url.as_str()).json(&request);
-        if let Some((user, password)) = &self.auth {
-            http_request = http_request.basic_auth(user, Some(password));
+        if let Some(auth) = &self.auth {
+            http_request = http_request.basic_auth(&auth.user, Some(&auth.password));
         }
 
         let response = http_request
