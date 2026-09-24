@@ -32,7 +32,7 @@ jobs:
       - name: rustfmt
         run: cargo fmt --all --check
       - name: clippy
-        run: cargo clippy --all-targets --workspace -- -D warnings
+        run: cargo clippy --locked --all-targets --workspace -- -D warnings
 
   test:
     name: Test
@@ -46,6 +46,6 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: build
-        run: cargo build --workspace
+        run: cargo build --locked --workspace
       - name: test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace

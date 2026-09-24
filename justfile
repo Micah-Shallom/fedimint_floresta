@@ -11,12 +11,12 @@ fmt:
 # Fail on formatting or clippy warnings, as CI does
 check:
     cargo fmt --all --check
-    cargo clippy --all-targets --workspace -- -D warnings
+    cargo clippy --locked --all-targets --workspace -- -D warnings
 
 # Build and run all tests
 test:
-    cargo build --workspace
-    cargo test --workspace
+    cargo build --locked --workspace
+    cargo test --locked --workspace
 
 # Everything CI checks, in CI order
 pre-push: check test
