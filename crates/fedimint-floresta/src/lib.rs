@@ -29,12 +29,33 @@ use serde_json::json;
 /// Backend kind reported through [`BitcoinRpcConfig`].
 pub const FLORESTA_RPC_KIND: &str = "floresta";
 
+/// HTTP Basic auth credentials for the florestad RPC endpoint.
+pub struct RpcAuth {
+    pub(crate) user: String,
+    pub(crate) password: String,
+}
+
+impl RpcAuth {
+    pub fn new(user: String, password: String) -> Self {
+        Self { user, password }
+    }
+}
+
+impl std::fmt::Debug for RpcAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RpcAuth")
+            .field("user", &self.user)
+            .field("password", &"<redacted>")
+            .finish()
+    }
+}
+
 /// A Fedimint Bitcoin backend that talks to a running `florestad` over JSON-RPC.
 #[derive(Debug)]
 pub struct FlorestaClient {
     url: SafeUrl,
     /// Optional HTTP Basic auth. Ignored by florestad builds without RPC auth support.
-    auth: Option<(String, String)>,
+    auth: Option<RpcAuth>,
     http: reqwest::Client,
     /// Monotonic JSON-RPC request id, echoed back by the server per request.
     next_id: AtomicU64,
@@ -42,9 +63,15 @@ pub struct FlorestaClient {
 
 impl FlorestaClient {
     /// Creates a client for the florestad JSON-RPC endpoint at `url`.
-    pub fn new(url: &SafeUrl, auth: Option<(String, String)>) -> Result<Self> {
+    ///
+    /// Credentials embedded in `url` are stripped from the stored copy, so the
+    /// URL fedimint exposes on its dashboard never carries secrets.
+    pub fn new(url: &SafeUrl, auth: Option<RpcAuth>) -> Result<Self> {
         Ok(Self {
-            url: url.clone(),
+            url: url
+                .without_auth()
+                .ok()
+                .context("could not strip credentials from florestad URL")?,
             auth,
             http: reqwest::Client::builder()
                 .timeout(rpc::REQUEST_TIMEOUT)
@@ -174,5 +201,23 @@ mod tests {
             .downcast_ref::<RpcError>()
             .expect("expected typed RPC error");
         assert_eq!(rpc_error.code, error::CODE_BLOCK_NOT_FOUND);
+    }
+
+    #[test]
+    fn auth_debug_redacts_password() {
+        let auth = RpcAuth::new("guardian".into(), "hunter2".into());
+        let rendered = format!("{auth:?}");
+        assert!(rendered.contains("guardian"));
+        assert!(!rendered.contains("hunter2"));
+        assert!(rendered.contains("<redacted>"));
+    }
+
+    #[test]
+    fn stored_url_drops_embedded_credentials() {
+        let url: SafeUrl = "http://user:secret@127.0.0.1:18442/".parse().unwrap();
+        let client = FlorestaClient::new(&url, None).unwrap();
+        let stored = client.get_url().to_string();
+        assert!(!stored.contains("user"));
+        assert!(!stored.contains("secret"));
     }
 }
