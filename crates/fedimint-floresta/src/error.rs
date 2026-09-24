@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::fmt;
+use core::fmt;
 
 /// `getblockhash`/`getblock` for a block the node does not know (e.g. height above tip).
 pub const CODE_BLOCK_NOT_FOUND: i64 = -32098;
@@ -16,7 +16,6 @@ pub const CODE_NODE_ERROR: i64 = -32091;
 pub struct RpcError {
     pub code: i64,
     pub message: String,
-    #[serde(default)]
     pub data: Option<serde_json::Value>,
 }
 

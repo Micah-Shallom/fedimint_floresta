@@ -12,10 +12,10 @@
 
 use std::sync::atomic::AtomicU64;
 
-pub mod error;
+mod error;
 mod rpc;
 
-pub use error::RpcError;
+pub use error::{CODE_BLOCK_NOT_FOUND, CODE_NODE_ERROR, RpcError};
 
 use anyhow::{Context as _, Result};
 use async_trait::async_trait;
