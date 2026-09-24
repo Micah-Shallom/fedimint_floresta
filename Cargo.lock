@@ -2183,14 +2183,11 @@ dependencies = [
  "async-trait",
  "bitcoin",
  "fedimint-core",
- "fedimint-logging",
  "fedimint-server-core",
- "hex",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -2799,19 +2796,8 @@ source = "git+https://github.com/fedimint/fedimint?rev=483a830aa183d543ace423137
 name = "fedimintd-floresta"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "clap",
- "fedimint-core",
  "fedimint-floresta",
- "fedimint-logging",
- "fedimint-rocksdb",
- "fedimint-server",
- "fedimint-server-core",
- "fedimint-server-ui",
  "fedimintd",
- "futures",
- "tokio",
- "tracing",
 ]
 
 [[package]]
