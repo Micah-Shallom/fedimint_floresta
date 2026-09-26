@@ -3,9 +3,11 @@
 //! Fedimint server Bitcoin backend backed by a `florestad` JSON-RPC endpoint.
 //!
 //! [`FlorestaClient`] implements [`IServerBitcoinRpc`], the trait a Fedimint guardian
-//! uses to observe the Bitcoin chain and broadcast transactions. Floresta's JSON-RPC
-//! is a Bitcoin Core compatible subset, so every method is a thin passthrough; the
-//! only intentional deviation is `get_feerate`, which Floresta cannot estimate.
+//! uses to observe the Bitcoin chain and broadcast transactions, over Floresta's
+//! Bitcoin Core compatible JSON-RPC. Deliberate deviations from a plain passthrough:
+//! the block count follows the validated height (`getblockchaininfo.blocks`), not
+//! the header chain, and `get_feerate` returns `None` since Floresta has no fee
+//! estimator (fedimint substitutes a fixed rate on regtest).
 //!
 //! Pinned against fedimint `483a830`. Block fetch (`get_block`) and transaction
 //! broadcast (`submit_transaction`) are not implemented yet.
