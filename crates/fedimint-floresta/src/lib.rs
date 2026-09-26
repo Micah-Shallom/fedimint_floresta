@@ -160,9 +160,31 @@ mod tests {
 
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            // The request fits one read on loopback; its content is irrelevant here.
-            let mut request = [0u8; 4096];
-            let _ = stream.read(&mut request).await.unwrap();
+            // Drain the full request (headers, then content-length bytes) so the
+            // response is never written mid-request, even if reads fragment.
+            let mut request = Vec::new();
+            let mut buf = [0u8; 1024];
+            let body_start = loop {
+                let n = stream.read(&mut buf).await.unwrap();
+                assert!(n > 0, "request ended before headers were complete");
+                request.extend_from_slice(&buf[..n]);
+                if let Some(pos) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break pos + 4;
+                }
+            };
+            let headers = String::from_utf8_lossy(&request[..body_start]).to_lowercase();
+            let content_length: usize = headers
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:"))
+                .expect("request must declare content-length")
+                .trim()
+                .parse()
+                .unwrap();
+            while request.len() < body_start + content_length {
+                let n = stream.read(&mut buf).await.unwrap();
+                assert!(n > 0, "request ended before the body was complete");
+                request.extend_from_slice(&buf[..n]);
+            }
             let response = format!(
                 "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{response_body}",
                 response_body.len(),
@@ -185,21 +207,21 @@ mod tests {
 
     #[tokio::test]
     async fn block_hash_round_trips() {
-        let body: &str = r#"{"jsonrpc":"2.0","result":"644a2cc8bf2a5efc69ade867028a75c56c5e33ab29919ef6b8f50a58ea8a2e25","id":0}"#;
+        let body = format!(r#"{{"jsonrpc":"2.0","result":"{HASH_1}","id":0}}"#).leak();
         let client = client_with_stub(body).await;
         assert_eq!(client.get_block_hash(1).await.unwrap().to_string(), HASH_1);
     }
 
     #[tokio::test]
     async fn sync_progress_reads_verificationprogress() {
-        let body: &str = r#"{"jsonrpc":"2.0","result":{"chain":"regtest","blocks":546,"verificationprogress":1.0,"initialblockdownload":false},"id":0}"#;
+        let body = r#"{"jsonrpc":"2.0","result":{"chain":"regtest","blocks":546,"verificationprogress":1.0,"initialblockdownload":false},"id":0}"#;
         let client = client_with_stub(body).await;
         assert_eq!(client.get_sync_progress().await.unwrap(), Some(1.0));
     }
 
     #[tokio::test]
     async fn block_not_found_surfaces_as_typed_error() {
-        let body: &str =
+        let body =
             r#"{"jsonrpc":"2.0","error":{"code":-32098,"message":"Block not found"},"id":0}"#;
         let client = client_with_stub(body).await;
         let error = client.get_block_hash(1_000_000).await.unwrap_err();
