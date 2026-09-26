@@ -61,7 +61,21 @@ pub struct FlorestaClient {
     next_id: AtomicU64,
 }
 
+/// The fields of `getblockchaininfo` the adapter relies on.
+#[derive(Debug, serde::Deserialize)]
+struct BlockchainInfo {
+    /// Fully validated chain height. Distinct from `headers`, which tracks the
+    /// most-work header chain and runs ahead of validation during sync.
+    blocks: u64,
+    verificationprogress: f64,
+}
+
 impl FlorestaClient {
+    async fn blockchain_info(&self) -> Result<BlockchainInfo> {
+        let info = self.call("getblockchaininfo", vec![]).await?;
+        serde_json::from_value(info).context("unexpected getblockchaininfo shape")
+    }
+
     /// Creates a client for the florestad JSON-RPC endpoint at `url`.
     ///
     /// Credentials embedded in `url` are stripped from the stored copy, so the
@@ -95,14 +109,9 @@ impl IServerBitcoinRpc for FlorestaClient {
     }
 
     async fn get_block_count(&self) -> Result<u64> {
-        // `getblockcount` actually returns the tip height; the trait expects a
-        // count where genesis is 1, mirroring fedimint's bitcoind backend.
-        let height = self
-            .call("getblockcount", vec![])
-            .await?
-            .as_u64()
-            .context("getblockcount did not return an unsigned integer")?;
-        Ok(height + 1)
+        // Validated height, not `getblockcount`, which reports the header chain
+        // and runs ahead of validation during sync. Genesis counts as 1.
+        Ok(self.blockchain_info().await?.blocks + 1)
     }
 
     async fn get_block_hash(&self, height: u64) -> Result<BlockHash> {
@@ -125,12 +134,7 @@ impl IServerBitcoinRpc for FlorestaClient {
     }
 
     async fn get_sync_progress(&self) -> Result<Option<f64>> {
-        let info = self.call("getblockchaininfo", vec![]).await?;
-        let progress = info
-            .get("verificationprogress")
-            .and_then(serde_json::Value::as_f64)
-            .context("getblockchaininfo did not report verificationprogress")?;
-        Ok(Some(progress))
+        Ok(Some(self.blockchain_info().await?.verificationprogress))
     }
 
     async fn get_chain_id(&self) -> Result<ChainId> {
@@ -172,9 +176,11 @@ mod tests {
     const HASH_1: &str = "644a2cc8bf2a5efc69ade867028a75c56c5e33ab29919ef6b8f50a58ea8a2e25";
 
     #[tokio::test]
-    async fn block_count_is_height_plus_one() {
-        let client = client_with_stub(r#"{"jsonrpc":"2.0","result":546,"id":0}"#).await;
-        assert_eq!(client.get_block_count().await.unwrap(), 547);
+    async fn block_count_is_validated_height_plus_one() {
+        // blocks lags headers while syncing; the count must follow blocks.
+        let body = r#"{"jsonrpc":"2.0","result":{"chain":"regtest","blocks":540,"headers":546,"verificationprogress":0.98,"initialblockdownload":true},"id":0}"#;
+        let client = client_with_stub(body).await;
+        assert_eq!(client.get_block_count().await.unwrap(), 541);
     }
 
     #[tokio::test]
