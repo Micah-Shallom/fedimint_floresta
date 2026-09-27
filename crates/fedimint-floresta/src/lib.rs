@@ -121,8 +121,17 @@ impl IServerBitcoinRpc for FlorestaClient {
         serde_json::from_value(result).context("getblockhash did not return a block hash")
     }
 
-    async fn get_block(&self, _block_hash: &BlockHash) -> Result<Block> {
-        bail!("get_block is not implemented yet")
+    async fn get_block(&self, block_hash: &BlockHash) -> Result<Block> {
+        // Verbosity 0 returns the raw block as hex; florestad fetches it from
+        // a peer on demand and errors cleanly when it has none.
+        let result = self
+            .call("getblock", vec![json!(block_hash), json!(0)])
+            .await?;
+        let block_hex = result
+            .as_str()
+            .context("getblock did not return a string")?;
+        bitcoin::consensus::encode::deserialize_hex(block_hex)
+            .context("getblock returned undecodable block hex")
     }
 
     /// Always `Ok(None)`: Floresta has no fee estimator.
@@ -249,10 +258,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn block_round_trips_through_raw_hex() {
+        use bitcoin::hashes::Hash as _;
+        let block = Block {
+            header: bitcoin::block::Header {
+                version: bitcoin::block::Version::TWO,
+                prev_blockhash: BlockHash::all_zeros(),
+                merkle_root: bitcoin::TxMerkleNode::all_zeros(),
+                time: 1_700_000_000,
+                bits: bitcoin::CompactTarget::from_consensus(0x207f_ffff),
+                nonce: 0,
+            },
+            txdata: vec![],
+        };
+        let block_hex = bitcoin::consensus::encode::serialize_hex(&block);
+        let body = format!(r#"{{"jsonrpc":"2.0","result":"{block_hex}","id":0}}"#).leak();
+        let client = client_with_stub(body).await;
+        assert_eq!(client.get_block(&block.block_hash()).await.unwrap(), block);
+    }
+
+    #[tokio::test]
     async fn unimplemented_methods_error_instead_of_panicking() {
         let client = client_with_stub("{}").await;
-        let hash: BlockHash = HASH_1.parse().unwrap();
-        assert!(client.get_block(&hash).await.is_err());
         let tx = Transaction {
             version: bitcoin::transaction::Version::TWO,
             lock_time: bitcoin::absolute::LockTime::ZERO,
