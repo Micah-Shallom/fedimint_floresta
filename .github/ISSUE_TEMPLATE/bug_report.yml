@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the adapter or guardian binary misbehaves
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands, RPC calls, or setup that trigger it.
+    validations:
+      required: true
+  - type: input
+    id: florestad-version
+    attributes:
+      label: florestad version
+      description: Output of `florestad --version`, or the commit it was built from.
+    validations:
+      required: true
+  - type: input
+    id: adapter-version
+    attributes:
+      label: fedimint-floresta commit
+      description: The commit of this repo you are running.
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - regtest
+        - signet
+        - testnet4
+        - mainnet
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: The failing RPC, error output, or guardian log lines.
+      render: shell
