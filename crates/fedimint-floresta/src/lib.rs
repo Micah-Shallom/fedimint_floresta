@@ -9,8 +9,7 @@
 //! the header chain, and `get_feerate` returns `None` since Floresta has no fee
 //! estimator (fedimint substitutes a fixed rate on regtest).
 //!
-//! Pinned against fedimint `483a830`. Block fetch (`get_block`) and transaction
-//! broadcast (`submit_transaction`) are not implemented yet.
+//! Pinned against fedimint `483a830`.
 
 use std::sync::atomic::AtomicU64;
 
@@ -19,7 +18,7 @@ mod rpc;
 
 pub use error::{CODE_BLOCK_NOT_FOUND, CODE_NODE_ERROR, RpcError};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use async_trait::async_trait;
 use bitcoin::{Block, BlockHash, Transaction};
 use fedimint_core::envs::BitcoinRpcConfig;
@@ -146,8 +145,13 @@ impl IServerBitcoinRpc for FlorestaClient {
         Ok(None)
     }
 
-    async fn submit_transaction(&self, _transaction: Transaction) -> Result<()> {
-        bail!("submit_transaction is not implemented yet")
+    async fn submit_transaction(&self, transaction: Transaction) -> Result<()> {
+        // The returned txid is informational; fedimint retries broadcasts, and
+        // florestad accepts rebroadcasts of known transactions without error.
+        let tx_hex = bitcoin::consensus::encode::serialize_hex(&transaction);
+        self.call("sendrawtransaction", vec![json!(tx_hex)])
+            .await
+            .map(|_| ())
     }
 
     async fn get_sync_progress(&self) -> Result<Option<f64>> {
@@ -278,15 +282,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unimplemented_methods_error_instead_of_panicking() {
-        let client = client_with_stub("{}").await;
+    async fn transaction_broadcast_returns_ok_on_txid() {
+        let body = format!(r#"{{"jsonrpc":"2.0","result":"{HASH_1}","id":0}}"#).leak();
+        let client = client_with_stub(body).await;
         let tx = Transaction {
             version: bitcoin::transaction::Version::TWO,
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![],
             output: vec![],
         };
-        assert!(client.submit_transaction(tx).await.is_err());
+        assert!(client.submit_transaction(tx).await.is_ok());
     }
 
     #[test]
