@@ -19,7 +19,7 @@ mod rpc;
 
 pub use error::{CODE_BLOCK_NOT_FOUND, CODE_NODE_ERROR, RpcError};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
 use bitcoin::{Block, BlockHash, Transaction};
 use fedimint_core::envs::BitcoinRpcConfig;
@@ -122,7 +122,7 @@ impl IServerBitcoinRpc for FlorestaClient {
     }
 
     async fn get_block(&self, _block_hash: &BlockHash) -> Result<Block> {
-        todo!("getblock verbosity 0 passthrough")
+        bail!("get_block is not implemented yet")
     }
 
     async fn get_feerate(&self) -> Result<Option<Feerate>> {
@@ -132,7 +132,7 @@ impl IServerBitcoinRpc for FlorestaClient {
     }
 
     async fn submit_transaction(&self, _transaction: Transaction) -> Result<()> {
-        todo!("sendrawtransaction passthrough")
+        bail!("submit_transaction is not implemented yet")
     }
 
     async fn get_sync_progress(&self) -> Result<Option<f64>> {
@@ -240,6 +240,20 @@ mod tests {
         assert!(rendered.contains("guardian"));
         assert!(!rendered.contains("hunter2"));
         assert!(rendered.contains("<redacted>"));
+    }
+
+    #[tokio::test]
+    async fn unimplemented_methods_error_instead_of_panicking() {
+        let client = client_with_stub("{}").await;
+        let hash: BlockHash = HASH_1.parse().unwrap();
+        assert!(client.get_block(&hash).await.is_err());
+        let tx = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        };
+        assert!(client.submit_transaction(tx).await.is_err());
     }
 
     #[test]
