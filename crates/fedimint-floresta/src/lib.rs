@@ -125,9 +125,15 @@ impl IServerBitcoinRpc for FlorestaClient {
         bail!("get_block is not implemented yet")
     }
 
+    /// Always `Ok(None)`: Floresta has no fee estimator.
+    ///
+    /// On regtest fedimint substitutes a fixed rate and never consults this.
+    /// On any other network `None` fails the monitor's status poll, so the
+    /// guardian never reports connected and refuses all backend calls: a real
+    /// feerate source is required before non-regtest use. Quirk: fedimint
+    /// derives the network from the block-1 hash and treats unknown chains,
+    /// including testnet4, as regtest, so those work by accident.
     async fn get_feerate(&self) -> Result<Option<Feerate>> {
-        // Floresta has no fee estimator. `None` is correct on regtest, where Fedimint
-        // substitutes a fixed rate; other networks require an external feerate source.
         Ok(None)
     }
 
