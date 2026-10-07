@@ -11,6 +11,7 @@
 //!
 //! Pinned against fedimint `483a830`.
 
+use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 
 mod error;
@@ -18,7 +19,7 @@ mod rpc;
 
 pub use error::{CODE_BLOCK_NOT_FOUND, CODE_NODE_ERROR, RpcError};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use async_trait::async_trait;
 use bitcoin::{Block, BlockHash, Transaction};
 use fedimint_core::envs::BitcoinRpcConfig;
@@ -129,8 +130,36 @@ impl IServerBitcoinRpc for FlorestaClient {
         let block_hex = result
             .as_str()
             .context("getblock did not return a string")?;
-        bitcoin::consensus::encode::deserialize_hex(block_hex)
-            .context("getblock returned undecodable block hex")
+        let block: Block = bitcoin::consensus::encode::deserialize_hex(block_hex)
+            .context("getblock returned undecodable block hex")?;
+
+        // florestad serves user-requested blocks from an arbitrary peer without
+        // validating contents, so bind them to the trusted header here.
+        ensure!(
+            block.block_hash() == *block_hash,
+            "getblock returned a different block than {block_hash}"
+        );
+        ensure!(
+            block.check_merkle_root(),
+            "getblock returned a block with a bad merkle root: {block_hash}"
+        );
+        // A fully witness-stripped block passes by design; deposit scanning
+        // reads outputs and txids only, which are witness-independent.
+        ensure!(
+            block.check_witness_commitment(),
+            "getblock returned a block with a bad witness commitment: {block_hash}"
+        );
+        // Duplicated trailing transactions preserve the merkle root (CVE-2012-2459).
+        let mut seen_txids = HashSet::with_capacity(block.txdata.len());
+        ensure!(
+            block
+                .txdata
+                .iter()
+                .all(|tx| seen_txids.insert(tx.compute_txid())),
+            "getblock returned a block with duplicate transactions: {block_hash}"
+        );
+
+        Ok(block)
     }
 
     /// Always `Ok(None)`: Floresta has no fee estimator.
@@ -261,24 +290,79 @@ mod tests {
         assert!(rendered.contains("<redacted>"));
     }
 
-    #[tokio::test]
-    async fn block_round_trips_through_raw_hex() {
+    /// A minimal block that passes all content checks: one coinbase transaction,
+    /// header merkle root set to its txid (the root of a single-leaf tree).
+    fn valid_test_block() -> Block {
         use bitcoin::hashes::Hash as _;
-        let block = Block {
+        let coinbase = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![bitcoin::TxIn {
+                previous_output: bitcoin::OutPoint::null(),
+                script_sig: bitcoin::ScriptBuf::new(),
+                sequence: bitcoin::Sequence::MAX,
+                witness: bitcoin::Witness::new(),
+            }],
+            output: vec![],
+        };
+        let merkle_root = coinbase.compute_txid().to_raw_hash().into();
+        Block {
             header: bitcoin::block::Header {
                 version: bitcoin::block::Version::TWO,
                 prev_blockhash: BlockHash::all_zeros(),
-                merkle_root: bitcoin::TxMerkleNode::all_zeros(),
+                merkle_root,
                 time: 1_700_000_000,
                 bits: bitcoin::CompactTarget::from_consensus(0x207f_ffff),
                 nonce: 0,
             },
-            txdata: vec![],
-        };
-        let block_hex = bitcoin::consensus::encode::serialize_hex(&block);
+            txdata: vec![coinbase],
+        }
+    }
+
+    async fn client_serving_block(block: &Block) -> FlorestaClient {
+        let block_hex = bitcoin::consensus::encode::serialize_hex(block);
         let body = format!(r#"{{"jsonrpc":"2.0","result":"{block_hex}","id":0}}"#).leak();
-        let client = client_with_stub(body).await;
+        client_with_stub(body).await
+    }
+
+    #[tokio::test]
+    async fn block_round_trips_through_raw_hex() {
+        let block = valid_test_block();
+        let client = client_serving_block(&block).await;
         assert_eq!(client.get_block(&block.block_hash()).await.unwrap(), block);
+    }
+
+    #[tokio::test]
+    async fn block_for_wrong_hash_is_rejected() {
+        let client = client_serving_block(&valid_test_block()).await;
+        let other: BlockHash = HASH_1.parse().unwrap();
+        let error = client.get_block(&other).await.unwrap_err();
+        assert!(error.to_string().contains("different block"));
+    }
+
+    #[tokio::test]
+    async fn tampered_transaction_list_is_rejected() {
+        let mut block = valid_test_block();
+        let mut extra = block.txdata[0].clone();
+        extra.lock_time = bitcoin::absolute::LockTime::from_consensus(1);
+        block.txdata.push(extra);
+        // Header untouched: the hash matches the request, the merkle root does not.
+        let client = client_serving_block(&block).await;
+        let error = client.get_block(&block.block_hash()).await.unwrap_err();
+        assert!(error.to_string().contains("bad merkle root"));
+    }
+
+    #[tokio::test]
+    async fn duplicated_transactions_are_rejected() {
+        let mut block = valid_test_block();
+        let dup = block.txdata[0].clone();
+        block.txdata.push(dup);
+        // Recompute the root so the duplicate pair passes the merkle check
+        // (CVE-2012-2459) and only txid uniqueness can catch it.
+        block.header.merkle_root = block.compute_merkle_root().unwrap();
+        let client = client_serving_block(&block).await;
+        let error = client.get_block(&block.block_hash()).await.unwrap_err();
+        assert!(error.to_string().contains("duplicate transactions"));
     }
 
     #[tokio::test]
