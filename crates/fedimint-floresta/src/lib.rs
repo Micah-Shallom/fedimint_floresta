@@ -261,6 +261,12 @@ mod tests {
 
     const HASH_1: &str = "644a2cc8bf2a5efc69ade867028a75c56c5e33ab29919ef6b8f50a58ea8a2e25";
 
+    /// Block 150 of a regtest chain, exactly as served by `florestad getblock
+    /// <hash> 0` (2026-10-08). Unlike the constructed fixtures, these bytes
+    /// come from a real node and carry a segwit coinbase: a witness commitment
+    /// output plus the 32-byte witness nonce.
+    const RECORDED_REGTEST_BLOCK: &str = "000000305d60e22417d61d96652ed68c25a7d04ecf023689640b4b1de1fc946e0d83c578b57c00f98e7406e242fbd2d3fbe43bc0e2e06ebdf30ea72bfe4550e1eb8bf59315c9c66affff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff0402960000ffffffff0200f9029500000000160014ea03203d082cf1a2e4d80ab0a5260d58e730cb410000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000";
+
     #[tokio::test]
     async fn block_count_is_validated_height_plus_one() {
         // blocks lags headers while syncing; the count must follow blocks.
@@ -358,6 +364,22 @@ mod tests {
             request["params"],
             json!([block.block_hash().to_string(), 0])
         );
+    }
+
+    #[tokio::test]
+    async fn recorded_regtest_block_passes_all_checks() {
+        // Non-circular fixture: decoded bytes come from a real node, so this
+        // exercises decoding and the witness-commitment check on genuine data.
+        let block: Block =
+            bitcoin::consensus::encode::deserialize_hex(RECORDED_REGTEST_BLOCK).unwrap();
+        assert!(
+            !block.txdata[0].input[0].witness.is_empty(),
+            "fixture must carry a witness nonce"
+        );
+        let body =
+            format!(r#"{{"jsonrpc":"2.0","result":"{RECORDED_REGTEST_BLOCK}","id":0}}"#).leak();
+        let (client, _request) = client_with_stub(body).await;
+        assert_eq!(client.get_block(&block.block_hash()).await.unwrap(), block);
     }
 
     #[tokio::test]
