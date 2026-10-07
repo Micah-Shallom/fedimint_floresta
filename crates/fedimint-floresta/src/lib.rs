@@ -201,8 +201,12 @@ mod tests {
     use super::*;
 
     /// Serves exactly one canned JSON-RPC response on an ephemeral local port and
-    /// returns a client pointed at it, so tests exercise the full HTTP path.
-    async fn client_with_stub(response_body: &'static str) -> FlorestaClient {
+    /// returns a client pointed at it plus a receiver yielding the request body
+    /// the client sent, so tests can assert both sides of the exchange.
+    async fn client_with_stub(
+        response_body: &'static str,
+    ) -> (FlorestaClient, tokio::sync::oneshot::Receiver<Vec<u8>>) {
+        let (request_tx, request_rx) = tokio::sync::oneshot::channel();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url: SafeUrl = format!("http://{}/", listener.local_addr().unwrap())
             .parse()
@@ -235,6 +239,8 @@ mod tests {
                 assert!(n > 0, "request ended before the body was complete");
                 request.extend_from_slice(&buf[..n]);
             }
+            // Hand the JSON body back so the test can assert what was asked.
+            let _ = request_tx.send(request[body_start..body_start + content_length].to_vec());
             let response = format!(
                 "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{response_body}",
                 response_body.len(),
@@ -242,7 +248,15 @@ mod tests {
             stream.write_all(response.as_bytes()).await.unwrap();
         });
 
-        FlorestaClient::new(&url, None).unwrap()
+        (FlorestaClient::new(&url, None).unwrap(), request_rx)
+    }
+
+    /// Parses the captured request body into JSON for assertions.
+    async fn sent_request(
+        request_rx: tokio::sync::oneshot::Receiver<Vec<u8>>,
+    ) -> serde_json::Value {
+        serde_json::from_slice(&request_rx.await.expect("stub captured a request"))
+            .expect("request body is JSON")
     }
 
     const HASH_1: &str = "644a2cc8bf2a5efc69ade867028a75c56c5e33ab29919ef6b8f50a58ea8a2e25";
@@ -251,21 +265,27 @@ mod tests {
     async fn block_count_is_validated_height_plus_one() {
         // blocks lags headers while syncing; the count must follow blocks.
         let body = r#"{"jsonrpc":"2.0","result":{"chain":"regtest","blocks":540,"headers":546,"verificationprogress":0.98,"initialblockdownload":true},"id":0}"#;
-        let client = client_with_stub(body).await;
+        let (client, request_rx) = client_with_stub(body).await;
         assert_eq!(client.get_block_count().await.unwrap(), 541);
+        let request = sent_request(request_rx).await;
+        assert_eq!(request["method"], "getblockchaininfo");
+        assert_eq!(request["params"], json!([]));
     }
 
     #[tokio::test]
     async fn block_hash_round_trips() {
         let body = format!(r#"{{"jsonrpc":"2.0","result":"{HASH_1}","id":0}}"#).leak();
-        let client = client_with_stub(body).await;
+        let (client, request_rx) = client_with_stub(body).await;
         assert_eq!(client.get_block_hash(1).await.unwrap().to_string(), HASH_1);
+        let request = sent_request(request_rx).await;
+        assert_eq!(request["method"], "getblockhash");
+        assert_eq!(request["params"], json!([1]));
     }
 
     #[tokio::test]
     async fn sync_progress_reads_verificationprogress() {
         let body = r#"{"jsonrpc":"2.0","result":{"chain":"regtest","blocks":546,"verificationprogress":1.0,"initialblockdownload":false},"id":0}"#;
-        let client = client_with_stub(body).await;
+        let (client, _request) = client_with_stub(body).await;
         assert_eq!(client.get_sync_progress().await.unwrap(), Some(1.0));
     }
 
@@ -273,7 +293,7 @@ mod tests {
     async fn block_not_found_surfaces_as_typed_error() {
         let body =
             r#"{"jsonrpc":"2.0","error":{"code":-32098,"message":"Block not found"},"id":0}"#;
-        let client = client_with_stub(body).await;
+        let (client, _request) = client_with_stub(body).await;
         let error = client.get_block_hash(1_000_000).await.unwrap_err();
         let rpc_error = error
             .downcast_ref::<RpcError>()
@@ -319,7 +339,9 @@ mod tests {
         }
     }
 
-    async fn client_serving_block(block: &Block) -> FlorestaClient {
+    async fn client_serving_block(
+        block: &Block,
+    ) -> (FlorestaClient, tokio::sync::oneshot::Receiver<Vec<u8>>) {
         let block_hex = bitcoin::consensus::encode::serialize_hex(block);
         let body = format!(r#"{{"jsonrpc":"2.0","result":"{block_hex}","id":0}}"#).leak();
         client_with_stub(body).await
@@ -328,13 +350,19 @@ mod tests {
     #[tokio::test]
     async fn block_round_trips_through_raw_hex() {
         let block = valid_test_block();
-        let client = client_serving_block(&block).await;
+        let (client, request_rx) = client_serving_block(&block).await;
         assert_eq!(client.get_block(&block.block_hash()).await.unwrap(), block);
+        let request = sent_request(request_rx).await;
+        assert_eq!(request["method"], "getblock");
+        assert_eq!(
+            request["params"],
+            json!([block.block_hash().to_string(), 0])
+        );
     }
 
     #[tokio::test]
     async fn block_for_wrong_hash_is_rejected() {
-        let client = client_serving_block(&valid_test_block()).await;
+        let (client, _request) = client_serving_block(&valid_test_block()).await;
         let other: BlockHash = HASH_1.parse().unwrap();
         let error = client.get_block(&other).await.unwrap_err();
         assert!(error.to_string().contains("different block"));
@@ -347,7 +375,7 @@ mod tests {
         extra.lock_time = bitcoin::absolute::LockTime::from_consensus(1);
         block.txdata.push(extra);
         // Header untouched: the hash matches the request, the merkle root does not.
-        let client = client_serving_block(&block).await;
+        let (client, _request) = client_serving_block(&block).await;
         let error = client.get_block(&block.block_hash()).await.unwrap_err();
         assert!(error.to_string().contains("bad merkle root"));
     }
@@ -360,7 +388,7 @@ mod tests {
         // Recompute the root so the duplicate pair passes the merkle check
         // (CVE-2012-2459) and only txid uniqueness can catch it.
         block.header.merkle_root = block.compute_merkle_root().unwrap();
-        let client = client_serving_block(&block).await;
+        let (client, _request) = client_serving_block(&block).await;
         let error = client.get_block(&block.block_hash()).await.unwrap_err();
         assert!(error.to_string().contains("duplicate transactions"));
     }
@@ -368,14 +396,18 @@ mod tests {
     #[tokio::test]
     async fn transaction_broadcast_returns_ok_on_txid() {
         let body = format!(r#"{{"jsonrpc":"2.0","result":"{HASH_1}","id":0}}"#).leak();
-        let client = client_with_stub(body).await;
+        let (client, request_rx) = client_with_stub(body).await;
         let tx = Transaction {
             version: bitcoin::transaction::Version::TWO,
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![],
             output: vec![],
         };
+        let tx_hex = bitcoin::consensus::encode::serialize_hex(&tx);
         assert!(client.submit_transaction(tx).await.is_ok());
+        let request = sent_request(request_rx).await;
+        assert_eq!(request["method"], "sendrawtransaction");
+        assert_eq!(request["params"], json!([tx_hex]));
     }
 
     #[test]
