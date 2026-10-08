@@ -17,7 +17,7 @@ use std::sync::atomic::AtomicU64;
 mod error;
 mod rpc;
 
-pub use error::{CODE_BLOCK_NOT_FOUND, CODE_NODE_ERROR, RpcError};
+pub use error::{CODE_BLOCK_NOT_FOUND, CODE_MEMPOOL_ERROR, CODE_NODE_ERROR, RpcError};
 
 use anyhow::{Context as _, Result, ensure};
 use async_trait::async_trait;
@@ -365,14 +365,15 @@ mod tests {
 
     #[tokio::test]
     async fn rejected_broadcast_surfaces_as_typed_error() {
-        let body = r#"{"jsonrpc":"2.0","error":{"code":-26,"message":"tx-rejected"},"id":0}"#;
+        // Floresta's shape: -32094, "Mempool error", the reason in data.
+        let body = r#"{"jsonrpc":"2.0","error":{"code":-32094,"message":"Mempool error","data":"missing inputs"},"id":0}"#;
         let (client, _request) = client_with_stub(body).await;
         let error = client
             .submit_transaction(test_transaction())
             .await
             .unwrap_err();
         let rpc_error = error.downcast_ref::<RpcError>().expect("typed RPC error");
-        assert_eq!(rpc_error.code, -26);
+        assert_eq!(rpc_error.code, CODE_MEMPOOL_ERROR);
     }
 
     #[test]
@@ -471,12 +472,21 @@ mod tests {
 
     #[tokio::test]
     async fn duplicated_transactions_are_rejected() {
+        // An honest three-transaction block: the odd count means the merkle
+        // tree already pairs the last transaction with itself.
         let mut block = valid_test_block();
-        let dup = block.txdata[0].clone();
-        block.txdata.push(dup);
-        // Recompute the root so the duplicate pair passes the merkle check
-        // (CVE-2012-2459) and only txid uniqueness can catch it.
+        block.txdata.push(test_transaction());
+        let mut third = test_transaction();
+        third.lock_time = bitcoin::absolute::LockTime::from_consensus(99);
+        block.txdata.push(third);
         block.header.merkle_root = block.compute_merkle_root().unwrap();
+
+        // The CVE-2012-2459 mutation: duplicate the last transaction with the
+        // ORIGINAL header. The merkle root is unchanged, so the merkle check
+        // alone is blind to it; only txid uniqueness catches the block.
+        block.txdata.push(block.txdata[2].clone());
+        assert!(block.check_merkle_root(), "root must survive the mutation");
+
         let (client, _request) = client_serving_block(&block).await;
         let error = client.get_block(&block.block_hash()).await.unwrap_err();
         assert!(error.to_string().contains("duplicate transactions"));
