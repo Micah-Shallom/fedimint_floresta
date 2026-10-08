@@ -6,6 +6,8 @@ use core::fmt;
 pub const CODE_BLOCK_NOT_FOUND: i64 = -32098;
 /// Internal node failure, e.g. no peer to serve an on-demand block fetch.
 pub const CODE_NODE_ERROR: i64 = -32091;
+/// Mempool rejection of a submitted transaction; the reason is in `data`.
+pub const CODE_MEMPOOL_ERROR: i64 = -32094;
 
 /// A JSON-RPC error returned by florestad.
 ///
