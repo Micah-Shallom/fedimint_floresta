@@ -44,8 +44,8 @@ impl RpcAuth {
     }
 }
 
-impl std::fmt::Debug for RpcAuth {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for RpcAuth {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RpcAuth")
             .field("user", &self.user)
             .field("password", &"<redacted>")

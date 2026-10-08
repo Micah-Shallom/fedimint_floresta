@@ -29,4 +29,4 @@ impl fmt::Display for RpcError {
     }
 }
 
-impl std::error::Error for RpcError {}
+impl core::error::Error for RpcError {}
