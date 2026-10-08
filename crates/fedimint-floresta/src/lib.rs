@@ -21,6 +21,7 @@ pub use error::{CODE_BLOCK_NOT_FOUND, CODE_NODE_ERROR, RpcError};
 
 use anyhow::{Context as _, Result, ensure};
 use async_trait::async_trait;
+use bitcoin::consensus::encode::{deserialize_hex, serialize_hex};
 use bitcoin::{Block, BlockHash, Transaction};
 use fedimint_core::envs::BitcoinRpcConfig;
 use fedimint_core::util::SafeUrl;
@@ -130,7 +131,7 @@ impl IServerBitcoinRpc for FlorestaClient {
         let block_hex = result
             .as_str()
             .context("getblock did not return a string")?;
-        let block: Block = bitcoin::consensus::encode::deserialize_hex(block_hex)
+        let block: Block = deserialize_hex(block_hex)
             .context("getblock returned undecodable block hex")?;
 
         // florestad serves user-requested blocks from an arbitrary peer without
@@ -177,7 +178,7 @@ impl IServerBitcoinRpc for FlorestaClient {
     async fn submit_transaction(&self, transaction: Transaction) -> Result<()> {
         // The returned txid is informational; fedimint retries broadcasts, and
         // florestad accepts rebroadcasts of known transactions without error.
-        let tx_hex = bitcoin::consensus::encode::serialize_hex(&transaction);
+        let tx_hex = serialize_hex(&transaction);
         self.call("sendrawtransaction", vec![json!(tx_hex)])
             .await
             .map(|_| ())
@@ -392,7 +393,7 @@ mod tests {
     async fn client_serving_block(
         block: &Block,
     ) -> (FlorestaClient, tokio::sync::oneshot::Receiver<Vec<u8>>) {
-        let block_hex = bitcoin::consensus::encode::serialize_hex(block);
+        let block_hex = serialize_hex(block);
         let body = format!(r#"{{"jsonrpc":"2.0","result":"{block_hex}","id":0}}"#).leak();
         client_with_stub(body).await
     }
@@ -415,7 +416,7 @@ mod tests {
         // Non-circular fixture: decoded bytes come from a real node, so this
         // exercises decoding and the witness-commitment check on genuine data.
         let block: Block =
-            bitcoin::consensus::encode::deserialize_hex(RECORDED_REGTEST_BLOCK).unwrap();
+            deserialize_hex(RECORDED_REGTEST_BLOCK).unwrap();
         assert!(
             !block.txdata[0].input[0].witness.is_empty(),
             "fixture must carry a witness nonce"
@@ -469,7 +470,7 @@ mod tests {
             input: vec![],
             output: vec![],
         };
-        let tx_hex = bitcoin::consensus::encode::serialize_hex(&tx);
+        let tx_hex = serialize_hex(&tx);
         assert!(client.submit_transaction(tx).await.is_ok());
         let request = sent_request(request_rx).await;
         assert_eq!(request["method"], "sendrawtransaction");
