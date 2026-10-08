@@ -130,9 +130,9 @@ impl IServerBitcoinRpc for FlorestaClient {
             .await?;
         let block_hex = result
             .as_str()
-            .context("getblock did not return a string")?;
+            .with_context(|| format!("getblock did not return a string for {block_hash}"))?;
         let block: Block = deserialize_hex(block_hex)
-            .context("getblock returned undecodable block hex")?;
+            .with_context(|| format!("getblock returned undecodable hex for {block_hash}"))?;
 
         // florestad serves user-requested blocks from an arbitrary peer without
         // validating contents, so bind them to the trusted header here.
@@ -178,10 +178,14 @@ impl IServerBitcoinRpc for FlorestaClient {
     async fn submit_transaction(&self, transaction: Transaction) -> Result<()> {
         // The returned txid is informational; fedimint retries broadcasts, and
         // florestad accepts rebroadcasts of known transactions without error.
+        // Its mempool does not accept replacements, which only affects
+        // fedimint's deprecated opt-in RBF withdrawals.
+        let txid = transaction.compute_txid();
         let tx_hex = serialize_hex(&transaction);
         self.call("sendrawtransaction", vec![json!(tx_hex)])
             .await
             .map(|_| ())
+            .with_context(|| format!("failed to broadcast transaction {txid}"))
     }
 
     async fn get_sync_progress(&self) -> Result<Option<f64>> {
@@ -334,7 +338,7 @@ mod tests {
         let (client, _request) = client_with_stub(body).await;
         let hash: BlockHash = HASH_1.parse().unwrap();
         let error = client.get_block(&hash).await.unwrap_err();
-        assert!(error.to_string().contains("undecodable block hex"));
+        assert!(error.to_string().contains("undecodable hex"));
     }
 
     #[tokio::test]
