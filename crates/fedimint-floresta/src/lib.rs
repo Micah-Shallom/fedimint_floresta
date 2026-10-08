@@ -266,6 +266,28 @@ mod tests {
 
     const HASH_1: &str = "644a2cc8bf2a5efc69ade867028a75c56c5e33ab29919ef6b8f50a58ea8a2e25";
 
+    /// A txid distinct from [`HASH_1`], used where the stub answers broadcasts.
+    const TXID_1: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    /// A minimally realistic transaction: one input, one output. Floresta's
+    /// mempool rejects transactions with empty inputs or outputs.
+    fn test_transaction() -> Transaction {
+        Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![bitcoin::TxIn {
+                previous_output: bitcoin::OutPoint::new(TXID_1.parse().unwrap(), 0),
+                script_sig: bitcoin::ScriptBuf::new(),
+                sequence: bitcoin::Sequence::MAX,
+                witness: bitcoin::Witness::new(),
+            }],
+            output: vec![bitcoin::TxOut {
+                value: bitcoin::Amount::from_sat(10_000),
+                script_pubkey: bitcoin::ScriptBuf::new(),
+            }],
+        }
+    }
+
     /// Block 150 of a regtest chain, exactly as served by `florestad getblock
     /// <hash> 0` (2026-10-08). Unlike the constructed fixtures, these bytes
     /// come from a real node and carry a segwit coinbase: a witness commitment
@@ -345,13 +367,10 @@ mod tests {
     async fn rejected_broadcast_surfaces_as_typed_error() {
         let body = r#"{"jsonrpc":"2.0","error":{"code":-26,"message":"tx-rejected"},"id":0}"#;
         let (client, _request) = client_with_stub(body).await;
-        let tx = Transaction {
-            version: bitcoin::transaction::Version::TWO,
-            lock_time: bitcoin::absolute::LockTime::ZERO,
-            input: vec![],
-            output: vec![],
-        };
-        let error = client.submit_transaction(tx).await.unwrap_err();
+        let error = client
+            .submit_transaction(test_transaction())
+            .await
+            .unwrap_err();
         let rpc_error = error.downcast_ref::<RpcError>().expect("typed RPC error");
         assert_eq!(rpc_error.code, -26);
     }
@@ -419,8 +438,7 @@ mod tests {
     async fn recorded_regtest_block_passes_all_checks() {
         // Non-circular fixture: decoded bytes come from a real node, so this
         // exercises decoding and the witness-commitment check on genuine data.
-        let block: Block =
-            deserialize_hex(RECORDED_REGTEST_BLOCK).unwrap();
+        let block: Block = deserialize_hex(RECORDED_REGTEST_BLOCK).unwrap();
         assert!(
             !block.txdata[0].input[0].witness.is_empty(),
             "fixture must carry a witness nonce"
@@ -466,14 +484,9 @@ mod tests {
 
     #[tokio::test]
     async fn transaction_broadcast_returns_ok_on_txid() {
-        let body = format!(r#"{{"jsonrpc":"2.0","result":"{HASH_1}","id":0}}"#).leak();
+        let body = format!(r#"{{"jsonrpc":"2.0","result":"{TXID_1}","id":0}}"#).leak();
         let (client, request_rx) = client_with_stub(body).await;
-        let tx = Transaction {
-            version: bitcoin::transaction::Version::TWO,
-            lock_time: bitcoin::absolute::LockTime::ZERO,
-            input: vec![],
-            output: vec![],
-        };
+        let tx = test_transaction();
         let tx_hex = serialize_hex(&tx);
         assert!(client.submit_transaction(tx).await.is_ok());
         let request = sent_request(request_rx).await;
