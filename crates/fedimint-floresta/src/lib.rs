@@ -307,6 +307,50 @@ mod tests {
         assert_eq!(rpc_error.code, error::CODE_BLOCK_NOT_FOUND);
     }
 
+    #[tokio::test]
+    async fn block_fetch_node_error_surfaces_as_typed_error() {
+        // florestad with no peer to serve the block answers -32091.
+        let body = r#"{"jsonrpc":"2.0","error":{"code":-32091,"message":"Node error","data":"channel closed"},"id":0}"#;
+        let (client, _request) = client_with_stub(body).await;
+        let hash: BlockHash = HASH_1.parse().unwrap();
+        let error = client.get_block(&hash).await.unwrap_err();
+        let rpc_error = error.downcast_ref::<RpcError>().expect("typed RPC error");
+        assert_eq!(rpc_error.code, CODE_NODE_ERROR);
+    }
+
+    #[tokio::test]
+    async fn block_fetch_non_string_result_is_rejected() {
+        let body = r#"{"jsonrpc":"2.0","result":42,"id":0}"#;
+        let (client, _request) = client_with_stub(body).await;
+        let hash: BlockHash = HASH_1.parse().unwrap();
+        let error = client.get_block(&hash).await.unwrap_err();
+        assert!(error.to_string().contains("did not return a string"));
+    }
+
+    #[tokio::test]
+    async fn block_fetch_undecodable_hex_is_rejected() {
+        let body = r#"{"jsonrpc":"2.0","result":"deadbeef","id":0}"#;
+        let (client, _request) = client_with_stub(body).await;
+        let hash: BlockHash = HASH_1.parse().unwrap();
+        let error = client.get_block(&hash).await.unwrap_err();
+        assert!(error.to_string().contains("undecodable block hex"));
+    }
+
+    #[tokio::test]
+    async fn rejected_broadcast_surfaces_as_typed_error() {
+        let body = r#"{"jsonrpc":"2.0","error":{"code":-26,"message":"tx-rejected"},"id":0}"#;
+        let (client, _request) = client_with_stub(body).await;
+        let tx = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        };
+        let error = client.submit_transaction(tx).await.unwrap_err();
+        let rpc_error = error.downcast_ref::<RpcError>().expect("typed RPC error");
+        assert_eq!(rpc_error.code, -26);
+    }
+
     #[test]
     fn auth_debug_redacts_password() {
         let auth = RpcAuth::new("guardian".into(), "hunter2".into());
