@@ -2796,8 +2796,23 @@ source = "git+https://github.com/fedimint/fedimint?rev=483a830aa183d543ace423137
 name = "fedimintd-floresta"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "bitcoin",
+ "clap",
+ "fedimint-core",
  "fedimint-floresta",
+ "fedimint-logging",
+ "fedimint-metrics",
+ "fedimint-rocksdb",
+ "fedimint-server",
+ "fedimint-server-bitcoin-rpc",
+ "fedimint-server-core",
+ "fedimint-server-ui",
  "fedimintd",
+ "fedimintd-envs",
+ "futures",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
